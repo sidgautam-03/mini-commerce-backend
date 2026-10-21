@@ -8,7 +8,7 @@ const authRoutes = require('./routes/authRoutes');
 const ProductRoutes = require('./routes/productRoutes');
 const cartRoutes = require('./routes/cartRoutes');
 const orderRoutes = require('./routes/orderRoutes');
-
+const { notFound, errorHandler } = require('./middleware/errorMiddleware');
 connectDB();
 
 const app = express();
@@ -37,6 +37,9 @@ app.use('/api/auth', authRoutes);
 app.use('/api/products', ProductRoutes);
 app.use('/api/cart', cartRoutes);
 app.use('/api/orders', orderRoutes);
+
+app.use(notFound);
+app.use(errorHandler);
 
 // Health check route
 app.get('/health', (req, res) => {
