@@ -6,6 +6,7 @@ const cors = require('cors');
 const connectDB = require('./config/db');
 const authRoutes = require('./routes/authRoutes');
 const ProductRoutes = require('./routes/productRoutes');
+const cartRoutes = require('./routes/cartRoutes');
 
 connectDB();
 
@@ -33,6 +34,7 @@ app.use((req, res, next) => {
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/products', ProductRoutes);
+app.use('/api/cart', cartRoutes);
 
 // Health check route
 app.get('/health', (req, res) => {
