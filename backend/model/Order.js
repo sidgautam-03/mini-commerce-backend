@@ -30,5 +30,6 @@ const orderSchema = new mongoose.Schema(
         },
 
         items: [orderItemsSchema],
+        
     }
 )
