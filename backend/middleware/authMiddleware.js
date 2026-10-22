@@ -1,45 +1,36 @@
 const jwt = require('jsonwebtoken');
-const user = require('models/User');
+const User = require('../models/User');
 
-// verify jwt Token
+// Any logged-in user (customer or admin)
+const protect = async (req, res, next) => {
+  const header = req.headers.authorization;
 
-const protect = async(req,res,next) => {
+  if (!header || !header.startsWith('Bearer ')) {
+    return res.status(401).json({ message: 'Not authorized, no token' });
+  }
 
-    let token;
-}
+  try {
+    const token = header.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-if(
-    req.headers.authorization && 
-    req.headers.authorization.startsWith('bearer')
-) {
-        try{
-            token = req.headers.authorization.split('')[1];
-            const encoded = jwt.verify(token,process.env.JWT_SECRET);
+    req.user = await User.findById(decoded.id).select('-password');
 
-            req.user = await UserActivation.findById(decoded.id).select('-password');
-            if(!req.user){
+    if (!req.user) {
+      return res.status(401).json({ message: 'User not found' });
+    }
 
-                return res.status(401).json({message: 'User not found' });
-            }
+    next();
+  } catch (error) {
+    res.status(401).json({ message: 'Not authorized, token invalid or expired' });
+  }
+};
 
-            return next();
-        }catch(error){
+// Admin only (always use after protect)
+const adminOnly = (req, res, next) => {
+  if (req.user && req.user.role === 'admin') {
+    return next();
+  }
+  res.status(403).json({ message: 'Access denied: admin privileges required' });
+};
 
-            return res.status(401).json({message: 'Not authorized, no token'});
-        }
-    };
-
-    // admin guard middleware
-
-    const adminOnly = (req,res, next) => {
-
-        if(req.user && req.user.role === 'admin') {
-
-            next();
-        }else{
-
-            res.status(403).json({message: 'Access denied: Admin privilages required'});
-        }
-    };
-
-    module.exports = {protect, adminOnly };
+module.exports = { protect, adminOnly, admin: adminOnly };
