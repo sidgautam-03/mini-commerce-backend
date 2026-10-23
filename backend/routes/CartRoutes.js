@@ -6,7 +6,7 @@ const {
   updateCartItemQuantity,
   removeFromCart,
   clearCart,
-} = require('../controllers/cartController');
+} = require('../controllers/ShoppingCartController');
 const { protect } = require('../middleware/authMiddleware');
 
 router.get('/', protect, getCart);
