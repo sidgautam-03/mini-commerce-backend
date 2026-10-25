@@ -6,7 +6,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const helmet = require('helmet');
-
+const { apiLimiter, authLimiter } = require('./middleware/rateLimiter');
 // config
 const connectDB = require('./config/db');
 
@@ -48,6 +48,8 @@ app.use(
 );
 app.use(cors(corsOptions));
 app.use(express.json());
+app.use('/api', apiLimiter);
+app.use('/api/auth', authLimiter);
 
 // ---------- Socket.IO ----------
 const io = new Server(server, {
