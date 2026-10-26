@@ -7,6 +7,7 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const helmet = require('helmet');
 const { apiLimiter, authLimiter } = require('./middleware/rateLimiter');
+const jwt = require('jsonwebtoken');
 // config
 const connectDB = require('./config/db');
 
@@ -28,7 +29,7 @@ const server = http.createServer(app);
 // ---------- CORS options (Express aur Socket.IO dono ke liye ek hi) ----------
 // .env mein CLIENT_URL=http://localhost:3000 (React ka address)
 // Alag-alag origins ho toh comma se alag karo: http://localhost:3000,http://localhost:5173
-const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:3000')
+const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:5173')
   .split(',')
   .map((o) => o.trim());
 
