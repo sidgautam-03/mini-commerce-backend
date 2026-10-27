@@ -24,12 +24,12 @@ const orderSchema = new mongoose.Schema(
     },
     orderItems: [orderItemSchema],
     shippingAddress: {
-      fullName: { type: String, required: true },
-      phone: { type: String, required: true },
-      street: { type: String, required: true },
-      city: { type: String, required: true },
-      postalCode: { type: String, required: true },
-    },
+  fullName: { type: String, required: true },
+  phone: { type: String, required: true },
+  street: { type: String, required: true },
+  city: { type: String, required: true },
+  postalCode: { type: String, required: true },
+},
     paymentMethod: {
       type: String,
       enum: ['DIRECT', 'RAZORPAY'],
