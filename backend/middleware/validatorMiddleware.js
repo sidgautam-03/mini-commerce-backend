@@ -1,4 +1,4 @@
-const { body, validationResult } = require('express-validator');
+import { body, validationResult } from 'express-validator';
 
 // Rules ke baad chalta hai: errors ho toh 400 ke saath errorHandler ko bhejta hai
 const validate = (req, res, next) => {
@@ -52,4 +52,4 @@ const loginRules = [
     .notEmpty().withMessage('Password is required'),
 ];
 
-module.exports = { validate, registerRules, loginRules };
+export { validate, registerRules, loginRules };

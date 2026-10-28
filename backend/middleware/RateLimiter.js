@@ -1,6 +1,4 @@
-const rateLimit = require('express-rate-limit');
-
-
+import rateLimit from 'express-rate-limit';
 
 // Auth routes ke liye strict limiter (Brute-force prevention)
 export const authLimiter = rateLimit({
@@ -21,5 +19,3 @@ export const apiLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
-
-app.use(limiter)

@@ -1,5 +1,5 @@
-const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+import jwt from 'jsonwebtoken';
+import User from '../models/User.js';
 
 // Any logged-in user (customer or admin)
 const protect = async (req, res, next) => {
@@ -33,4 +33,4 @@ const adminOnly = (req, res, next) => {
   res.status(403).json({ message: 'Access denied: admin privileges required' });
 };
 
-module.exports = { protect, adminOnly, admin: adminOnly };
+export { protect, adminOnly, adminOnly as admin };

@@ -1,4 +1,4 @@
-const Product = require('../models/Product');
+import Product from '../models/Product.js';
 
 // GET /api/products?keyword=&category=&sortBy=&order=
 const getProducts = async (req, res) => {
@@ -122,7 +122,7 @@ const deleteProduct = async (req, res) => {
   }
 };
 
-module.exports = {
+export {
   getProducts,
   getProductById,
   createProduct,
