@@ -1,34 +1,24 @@
-/**
- * Unit tests for controllers/cartController.js
- *
- * Place at <server-root>/tests/cartController.test.js
- * (adjust the relative paths if your folder layout is different).
- *
- * Run:  npx jest cartController
- *
- * express-async-handler is NOT mocked: it forwards thrown errors to next(err),
- * so every error case asserts both the status code set on res and the error given to next.
- */
-const {
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import {
   getCart,
   addToCart,
   updateCartItemQuantity,
   removeFromCart,
   clearCart,
-} = require('../controllers/cartController');
-const Cart = require('../models/Cart');
-const Product = require('../models/Product');
+} from '../controllers/ShoppingCartController.js';
+import Cart from '../models/Cart.js';
+import Product from '../models/Product.js';
 
-// Cart is used both as a constructor (new Cart) and for statics (findOne, create)
-jest.mock('../models/Cart', () => {
-  const CartMock = jest.fn();
-  CartMock.findOne = jest.fn();
-  CartMock.create = jest.fn();
-  return CartMock;
+// Cart is used as a constructor (new Cart) and for statics (findOne, create)
+vi.mock('../models/Cart.js', () => {
+  const CartMock = vi.fn();
+  CartMock.findOne = vi.fn();
+  CartMock.create = vi.fn();
+  return { default: CartMock };
 });
 
-jest.mock('../models/Product', () => ({
-  findById: jest.fn(),
+vi.mock('../models/Product.js', () => ({
+  default: { findById: vi.fn() },
 }));
 
 // ---------- helpers ----------
@@ -37,20 +27,20 @@ const POPULATE_ARGS = {
   select: 'name price image stock description category',
 };
 
-// A cart line whose product behaves like a populated doc / ObjectId (has toString)
+// cart line whose product behaves like a populated doc (has toString like an ObjectId)
 const makeItem = (id, quantity, price = 100) => ({
   product: { _id: id, name: `Product ${id}`, price, toString: () => id },
   quantity,
 });
 
-// catalog lets populate() turn raw product ids (strings pushed by addToCart) into docs
+// catalog lets populate() turn raw product ids (pushed by addToCart) into docs
 const makeCart = (items = [], catalog = {}) => {
   const cart = {
     _id: 'cart1',
     items,
-    save: jest.fn().mockResolvedValue(true),
+    save: vi.fn().mockResolvedValue(true),
   };
-  cart.populate = jest.fn().mockImplementation(async () => {
+  cart.populate = vi.fn().mockImplementation(async () => {
     cart.items = cart.items.map((item) =>
       typeof item.product === 'string' && catalog[item.product]
         ? { ...item, product: catalog[item.product] }
@@ -64,22 +54,17 @@ const makeProduct = (overrides = {}) => ({ _id: 'p1', name: 'Keyboard', price: 5
 
 const makeRes = () => {
   const res = {};
-  res.status = jest.fn().mockReturnValue(res);
-  res.json = jest.fn().mockReturnValue(res);
+  res.status = vi.fn().mockReturnValue(res);
+  res.json = vi.fn().mockReturnValue(res);
   return res;
 };
 
-const makeReq = (overrides = {}) => ({
-  user: { _id: 'user1' },
-  body: {},
-  params: {},
-  ...overrides,
-});
+const makeReq = (overrides = {}) => ({ user: { _id: 'user1' }, body: {}, params: {}, ...overrides });
 
-// runs a controller exactly like express would and returns what we need to assert on
+// runs a controller like express would (asyncHandler forwards errors to next)
 const run = async (handler, req) => {
   const res = makeRes();
-  const next = jest.fn();
+  const next = vi.fn();
   await handler(req, res, next);
   return { res, next };
 };
@@ -93,7 +78,7 @@ const expectError = ({ res, next }, status, message) => {
 // =====================================================================
 describe('cartController', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   // -------------------------------------------------------------------
@@ -118,25 +103,17 @@ describe('cartController', () => {
     });
 
     it('creates an empty cart when the user has none', async () => {
-      const cart = makeCart([]);
       Cart.findOne.mockResolvedValue(null);
-      Cart.create.mockResolvedValue(cart);
+      Cart.create.mockResolvedValue(makeCart([]));
 
       const { res } = await run(getCart, makeReq());
 
       expect(Cart.create).toHaveBeenCalledWith({ user: 'user1', items: [] });
-      expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith({
-        _id: 'cart1',
-        items: [],
-        subtotal: 0,
-        totalAmount: 0,
-      });
+      expect(res.json).toHaveBeenCalledWith({ _id: 'cart1', items: [], subtotal: 0, totalAmount: 0 });
     });
 
     it('treats a deleted product (null) as price 0 instead of crashing', async () => {
-      const cart = makeCart([{ product: null, quantity: 3 }, makeItem('p2', 2, 100)]);
-      Cart.findOne.mockResolvedValue(cart);
+      Cart.findOne.mockResolvedValue(makeCart([{ product: null, quantity: 3 }, makeItem('p2', 2, 100)]));
 
       const { res } = await run(getCart, makeReq());
 
@@ -144,8 +121,7 @@ describe('cartController', () => {
     });
 
     it('rounds totals to 2 decimals (floating point safe)', async () => {
-      const cart = makeCart([makeItem('p1', 3, 0.1)]); // 0.30000000000000004 in raw JS
-      Cart.findOne.mockResolvedValue(cart);
+      Cart.findOne.mockResolvedValue(makeCart([makeItem('p1', 3, 0.1)])); // 0.30000000000000004
 
       const { res } = await run(getCart, makeReq());
 
@@ -204,7 +180,9 @@ describe('cartController', () => {
       Product.findById.mockResolvedValue(product);
       Cart.findOne.mockResolvedValue(null);
       const newCart = makeCart([], { p1: product });
-      Cart.mockImplementation(() => newCart);
+      Cart.mockImplementation(function () {
+        return newCart;
+      });
 
       const { res } = await run(addToCart, makeReq({ body: { productId: 'p1' } }));
 
@@ -213,9 +191,7 @@ describe('cartController', () => {
       expect(newCart.items[0].quantity).toBe(1);
       expect(newCart.save).toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ subtotal: 500, totalAmount: 500 })
-      );
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ subtotal: 500, totalAmount: 500 }));
     });
 
     it('pushes a new line item when the product is not yet in the cart', async () => {
@@ -264,7 +240,7 @@ describe('cartController', () => {
       const result = await run(addToCart, makeReq({ body: { productId: 'p1', quantity: 2 } }));
 
       expectError(result, 400, 'Cannot add more items. Only 5 items in stock.');
-      expect(cart.items[0].quantity).toBe(4); // unchanged
+      expect(cart.items[0].quantity).toBe(4);
       expect(cart.save).not.toHaveBeenCalled();
     });
 
@@ -278,8 +254,7 @@ describe('cartController', () => {
     });
 
     it('forwards a malformed productId (CastError) to next() and saves nothing', async () => {
-      // NOTE: today this reaches next() with no 400 set, so the error handler will answer 500.
-      // If you add an ObjectId check in the controller, change this test to expect 400.
+      // errorMiddleware turns CastError into a 400 for the client.
       const castError = new Error('Cast to ObjectId failed');
       castError.name = 'CastError';
       Product.findById.mockRejectedValue(castError);
@@ -294,8 +269,7 @@ describe('cartController', () => {
 
   // -------------------------------------------------------------------
   describe('updateCartItemQuantity', () => {
-    const req = (quantity, productId = 'p1') =>
-      makeReq({ params: { productId }, body: { quantity } });
+    const req = (quantity, productId = 'p1') => makeReq({ params: { productId }, body: { quantity } });
 
     it.each([
       ['zero', 0],
@@ -313,17 +287,13 @@ describe('cartController', () => {
     it('returns 404 when the cart does not exist', async () => {
       Cart.findOne.mockResolvedValue(null);
 
-      const result = await run(updateCartItemQuantity, req(2));
-
-      expectError(result, 404, 'Cart not found');
+      expectError(await run(updateCartItemQuantity, req(2)), 404, 'Cart not found');
     });
 
     it('returns 404 when the item is not in the cart', async () => {
       Cart.findOne.mockResolvedValue(makeCart([makeItem('p9', 1)]));
 
-      const result = await run(updateCartItemQuantity, req(2));
-
-      expectError(result, 404, 'Item not in cart');
+      expectError(await run(updateCartItemQuantity, req(2)), 404, 'Item not in cart');
       expect(Product.findById).not.toHaveBeenCalled();
     });
 
@@ -331,9 +301,7 @@ describe('cartController', () => {
       Cart.findOne.mockResolvedValue(makeCart([makeItem('p1', 1)]));
       Product.findById.mockResolvedValue(null);
 
-      const result = await run(updateCartItemQuantity, req(2));
-
-      expectError(result, 404, 'Product not found');
+      expectError(await run(updateCartItemQuantity, req(2)), 404, 'Product not found');
     });
 
     it('returns 400 when the new quantity exceeds stock', async () => {
@@ -341,9 +309,7 @@ describe('cartController', () => {
       Cart.findOne.mockResolvedValue(cart);
       Product.findById.mockResolvedValue(makeProduct({ stock: 3 }));
 
-      const result = await run(updateCartItemQuantity, req(4));
-
-      expectError(result, 400, 'Cannot set quantity. Only 3 items in stock.');
+      expectError(await run(updateCartItemQuantity, req(4)), 400, 'Cannot set quantity. Only 3 items in stock.');
       expect(cart.items[0].quantity).toBe(1);
       expect(cart.save).not.toHaveBeenCalled();
     });
@@ -358,9 +324,7 @@ describe('cartController', () => {
       expect(cart.items[0].quantity).toBe(2);
       expect(cart.save).toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ subtotal: 1000, totalAmount: 1000 })
-      );
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ subtotal: 1000, totalAmount: 1000 }));
     });
 
     it('allows setting quantity exactly equal to stock', async () => {
@@ -382,18 +346,14 @@ describe('cartController', () => {
     it('returns 404 when the cart does not exist', async () => {
       Cart.findOne.mockResolvedValue(null);
 
-      const result = await run(removeFromCart, req());
-
-      expectError(result, 404, 'Cart not found');
+      expectError(await run(removeFromCart, req()), 404, 'Cart not found');
     });
 
     it('returns 404 when the item is not in the cart', async () => {
       const cart = makeCart([makeItem('p2', 1)]);
       Cart.findOne.mockResolvedValue(cart);
 
-      const result = await run(removeFromCart, req('p1'));
-
-      expectError(result, 404, 'Item not in cart');
+      expectError(await run(removeFromCart, req('p1')), 404, 'Item not in cart');
       expect(cart.save).not.toHaveBeenCalled();
     });
 
@@ -416,9 +376,7 @@ describe('cartController', () => {
     it('returns 404 when the cart does not exist', async () => {
       Cart.findOne.mockResolvedValue(null);
 
-      const result = await run(clearCart, makeReq());
-
-      expectError(result, 404, 'Cart not found');
+      expectError(await run(clearCart, makeReq()), 404, 'Cart not found');
     });
 
     it('empties the cart and returns zero totals', async () => {
@@ -430,12 +388,7 @@ describe('cartController', () => {
       expect(cart.items).toEqual([]);
       expect(cart.save).toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith({
-        _id: 'cart1',
-        items: [],
-        subtotal: 0,
-        totalAmount: 0,
-      });
+      expect(res.json).toHaveBeenCalledWith({ _id: 'cart1', items: [], subtotal: 0, totalAmount: 0 });
     });
 
     it('forwards save errors to next()', async () => {

@@ -4,10 +4,11 @@
   "description": "",
   "main": "backend/server.js",
   "scripts": {
-    "start": "node backend/server.js",
-    "dev": "nodemon backend/server.js",
-    "test": "jest"
-  },
+  "start": "node backend/server.js",
+  "dev": "nodemon backend/server.js",
+  "test": "vitest run",
+  "test:coverage": "vitest run --coverage"
+},
   "keywords": [],
   "author": "",
   "license": "ISC",
@@ -29,9 +30,11 @@
   "devDependencies": {
     "@babel/core": "^8.0.9",
     "@babel/preset-env": "^8.0.7",
+    "@vitest/coverage-v8": "^5.0.5",
     "babel-jest": "^30.5.2",
     "jest": "^30.5.2",
     "nodemon": "^3.1.14",
-    "supertest": "^7.3.1"
+    "supertest": "^7.3.1",
+    "vitest": "^5.0.5"
   }
 }

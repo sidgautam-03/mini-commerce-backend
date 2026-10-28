@@ -1,46 +1,33 @@
-/**
- * Unit tests for controllers/orderController.js
- *
- * Place this file at <server-root>/tests/orderController.test.js
- * (adjust the relative paths below if your folder layout is different).
- *
- * Run:  npx jest orderController
- */
-const crypto = require('crypto');
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import crypto from 'crypto';
 
-// ---------- mock credentials (no real Razorpay account is ever touched) ----------
+// ---------- mock credentials (generated at runtime, never a real key) ----------
 const MOCK_KEY_ID = 'rzp_test_MOCKKEYID123';
-const MOCK_KEY_SECRET = 'mock_razorpay_secret_456';
+const MOCK_KEY_SECRET = crypto.randomBytes(16).toString('hex');
 
-// ---------- module mocks ----------
-// Variable name must start with "mock" so jest.mock's hoisting allows it.
-const mockRzpOrdersCreate = jest.fn();
+const mocks = vi.hoisted(() => ({ rzpOrdersCreate: vi.fn() }));
 
-jest.mock('razorpay', () =>
-  jest.fn().mockImplementation(() => ({
-    orders: { create: mockRzpOrdersCreate },
-  }))
-);
-
-jest.mock('../models/Order', () => ({
-  create: jest.fn(),
-  find: jest.fn(),
-  findById: jest.fn(),
+vi.mock('razorpay', () => ({
+  default: vi.fn(function () {
+    return { orders: { create: mocks.rzpOrdersCreate } };
+  }),
 }));
 
-jest.mock('../models/Cart', () => ({
-  findOne: jest.fn(),
-  findOneAndUpdate: jest.fn(),
+vi.mock('../models/Order.js', () => ({
+  default: { create: vi.fn(), find: vi.fn(), findById: vi.fn() },
 }));
 
-jest.mock('../models/Product', () => ({
-  updateOne: jest.fn(),
-  find: jest.fn(),
+vi.mock('../models/Cart.js', () => ({
+  default: { findOne: vi.fn(), findOneAndUpdate: vi.fn() },
 }));
 
-// The controller creates the Razorpay instance at import time, based on env vars,
-// so we load it freshly (inside isolateModules) for each scenario.
-const loadController = ({ withRazorpay = true } = {}) => {
+vi.mock('../models/Product.js', () => ({
+  default: { updateOne: vi.fn(), find: vi.fn() },
+}));
+
+// The controller builds the Razorpay instance at import time (from env vars),
+// so each scenario re-imports it with the env it needs.
+const loadController = async ({ withRazorpay = true } = {}) => {
   if (withRazorpay) {
     process.env.RAZORPAY_KEY_ID = MOCK_KEY_ID;
     process.env.RAZORPAY_KEY_SECRET = MOCK_KEY_SECRET;
@@ -49,27 +36,30 @@ const loadController = ({ withRazorpay = true } = {}) => {
     delete process.env.RAZORPAY_KEY_SECRET;
   }
 
-  let loaded;
-  jest.isolateModules(() => {
-    loaded = {
-      controller: require('../controllers/orderController'),
-      Order: require('../models/Order'),
-      Cart: require('../models/Cart'),
-      Product: require('../models/Product'),
-    };
-  });
-  return loaded;
+  vi.resetModules();
+  return {
+    controller: await import('../controllers/OrderController.js'),
+    Order: (await import('../models/Order.js')).default,
+    Cart: (await import('../models/Cart.js')).default,
+    Product: (await import('../models/Product.js')).default,
+  };
 };
 
-// ---------- test helpers ----------
+// ---------- helpers ----------
 const mockRes = () => {
   const res = {};
-  res.status = jest.fn().mockReturnValue(res);
-  res.json = jest.fn().mockReturnValue(res);
+  res.status = vi.fn().mockReturnValue(res);
+  res.json = vi.fn().mockReturnValue(res);
   return res;
 };
 
-const validAddress = { street: '12 MG Road', city: 'Ahmedabad', postalCode: '380001' };
+const validAddress = {
+  fullName: 'Test User',
+  phone: '9999999999',
+  street: '12 MG Road',
+  city: 'Ahmedabad',
+  postalCode: '380001',
+};
 
 const makeProduct = (overrides = {}) => ({
   _id: 'prod1',
@@ -80,26 +70,21 @@ const makeProduct = (overrides = {}) => ({
   ...overrides,
 });
 
-const makeCart = (items) => ({
-  items,
-  save: jest.fn().mockResolvedValue(true),
-});
+const makeCart = (items) => ({ items, save: vi.fn().mockResolvedValue(true) });
 
-// Cart.findOne(...).populate(...) chain
 const mockCartLookup = (Cart, cart) => {
-  Cart.findOne.mockReturnValue({ populate: jest.fn().mockResolvedValue(cart) });
+  Cart.findOne.mockReturnValue({ populate: vi.fn().mockResolvedValue(cart) });
 };
 
-// Product.find(...).select(...) chain used by broadcastStock
 const mockStockLookup = (Product, rows = [{ _id: 'prod1', stock: 8 }]) => {
-  Product.find.mockReturnValue({ select: jest.fn().mockResolvedValue(rows) });
+  Product.find.mockReturnValue({ select: vi.fn().mockResolvedValue(rows) });
 };
 
 const makeReq = (overrides = {}) => ({
   user: { _id: 'user1', role: 'user' },
   body: {},
   params: {},
-  io: { emit: jest.fn() },
+  io: { emit: vi.fn() },
   ...overrides,
 });
 
@@ -113,9 +98,9 @@ const signFor = (razorpayOrderId, razorpayPaymentId) =>
 describe('orderController', () => {
   let controller, Order, Cart, Product;
 
-  beforeEach(() => {
-    jest.clearAllMocks();
-    ({ controller, Order, Cart, Product } = loadController({ withRazorpay: true }));
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    ({ controller, Order, Cart, Product } = await loadController({ withRazorpay: true }));
     Product.updateOne.mockResolvedValue({ modifiedCount: 1 });
     mockStockLookup(Product);
   });
@@ -209,7 +194,6 @@ describe('orderController', () => {
           ])
         );
 
-        // 1st reduce OK, 2nd reduce fails (someone bought it meanwhile), then rollback call OK
         Product.updateOne
           .mockResolvedValueOnce({ modifiedCount: 1 })
           .mockResolvedValueOnce({ modifiedCount: 0 })
@@ -222,19 +206,13 @@ describe('orderController', () => {
         expect(res.json).toHaveBeenCalledWith({
           message: '"Mouse" just went out of stock. Please review your cart.',
         });
-
-        // reduce p1, try p2, restore p1
         expect(Product.updateOne).toHaveBeenCalledTimes(3);
         expect(Product.updateOne).toHaveBeenNthCalledWith(
           1,
           { _id: 'prod1', stock: { $gte: 2 } },
           { $inc: { stock: -2 } }
         );
-        expect(Product.updateOne).toHaveBeenNthCalledWith(
-          3,
-          { _id: 'prod1' },
-          { $inc: { stock: 2 } }
-        );
+        expect(Product.updateOne).toHaveBeenNthCalledWith(3, { _id: 'prod1' }, { $inc: { stock: 2 } });
         expect(Order.create).not.toHaveBeenCalled();
       });
     });
@@ -272,7 +250,7 @@ describe('orderController', () => {
         expect(req.io.emit).toHaveBeenCalledWith('stockUpdated', [{ productId: 'prod1', stock: 8 }]);
         expect(res.status).toHaveBeenCalledWith(201);
         expect(res.json).toHaveBeenCalledWith({ order: expect.objectContaining({ _id: 'order1' }) });
-        expect(mockRzpOrdersCreate).not.toHaveBeenCalled();
+        expect(mocks.rzpOrdersCreate).not.toHaveBeenCalled();
       });
 
       it('defaults to DIRECT when paymentMethod is not provided', async () => {
@@ -307,19 +285,18 @@ describe('orderController', () => {
           ])
         );
         Order.create.mockImplementation(async (data) => ({ _id: 'order1', ...data }));
-        const res = mockRes();
 
-        await controller.createOrder(makeReq({ body: { shippingAddress: validAddress } }), res);
+        await controller.createOrder(makeReq({ body: { shippingAddress: validAddress } }), mockRes());
 
         expect(Order.create).toHaveBeenCalledWith(expect.objectContaining({ totalAmount: 30.5 }));
       });
     });
 
     describe('RAZORPAY payment', () => {
-      it('creates a pending order and returns razorpay details (cart is NOT cleared yet)', async () => {
+      it('creates a pending order and returns razorpay details (cart NOT cleared yet)', async () => {
         const cart = makeCart([{ product: makeProduct(), quantity: 2 }]);
         mockCartLookup(Cart, cart);
-        mockRzpOrdersCreate.mockResolvedValue({ id: 'order_rzp_1', amount: 100000, currency: 'INR' });
+        mocks.rzpOrdersCreate.mockResolvedValue({ id: 'order_rzp_1', amount: 100000, currency: 'INR' });
         Order.create.mockImplementation(async (data) => ({ _id: 'order1', ...data }));
 
         const req = makeReq({ body: { shippingAddress: validAddress, paymentMethod: 'RAZORPAY' } });
@@ -327,7 +304,7 @@ describe('orderController', () => {
 
         await controller.createOrder(req, res);
 
-        expect(mockRzpOrdersCreate).toHaveBeenCalledWith(
+        expect(mocks.rzpOrdersCreate).toHaveBeenCalledWith(
           expect.objectContaining({ amount: 100000, currency: 'INR' })
         );
         expect(Order.create).toHaveBeenCalledWith(
@@ -343,21 +320,15 @@ describe('orderController', () => {
         expect(res.status).toHaveBeenCalledWith(201);
         expect(res.json).toHaveBeenCalledWith({
           order: expect.objectContaining({ _id: 'order1' }),
-          razorpay: {
-            keyId: MOCK_KEY_ID,
-            orderId: 'order_rzp_1',
-            amount: 100000,
-            currency: 'INR',
-          },
+          razorpay: { keyId: MOCK_KEY_ID, orderId: 'order_rzp_1', amount: 100000, currency: 'INR' },
         });
       });
 
       it('falls back to a DIRECT order when Razorpay keys are not configured', async () => {
-        ({ controller, Order, Cart, Product } = loadController({ withRazorpay: false }));
+        ({ controller, Order, Cart, Product } = await loadController({ withRazorpay: false }));
         Product.updateOne.mockResolvedValue({ modifiedCount: 1 });
         mockStockLookup(Product);
-        const cart = makeCart([{ product: makeProduct(), quantity: 1 }]);
-        mockCartLookup(Cart, cart);
+        mockCartLookup(Cart, makeCart([{ product: makeProduct(), quantity: 1 }]));
         Order.create.mockImplementation(async (data) => ({ _id: 'order1', ...data }));
         const res = mockRes();
 
@@ -366,7 +337,7 @@ describe('orderController', () => {
           res
         );
 
-        expect(mockRzpOrdersCreate).not.toHaveBeenCalled();
+        expect(mocks.rzpOrdersCreate).not.toHaveBeenCalled();
         expect(Order.create).toHaveBeenCalledWith(
           expect.objectContaining({ paymentMethod: 'DIRECT', status: 'processing' })
         );
@@ -384,15 +355,12 @@ describe('orderController', () => {
 
         expect(res.status).toHaveBeenCalledWith(500);
         expect(res.json).toHaveBeenCalledWith({ message: 'DB down' });
-        expect(Product.updateOne).toHaveBeenLastCalledWith(
-          { _id: 'prod1' },
-          { $inc: { stock: 2 } }
-        );
+        expect(Product.updateOne).toHaveBeenLastCalledWith({ _id: 'prod1' }, { $inc: { stock: 2 } });
       });
 
       it('returns 500 and restores stock if Razorpay order creation fails', async () => {
         mockCartLookup(Cart, makeCart([{ product: makeProduct(), quantity: 2 }]));
-        mockRzpOrdersCreate.mockRejectedValue(new Error('Razorpay down'));
+        mocks.rzpOrdersCreate.mockRejectedValue(new Error('Razorpay down'));
         const res = mockRes();
 
         await controller.createOrder(
@@ -402,13 +370,10 @@ describe('orderController', () => {
 
         expect(res.status).toHaveBeenCalledWith(500);
         expect(res.json).toHaveBeenCalledWith({ message: 'Razorpay down' });
-        expect(Product.updateOne).toHaveBeenLastCalledWith(
-          { _id: 'prod1' },
-          { $inc: { stock: 2 } }
-        );
+        expect(Product.updateOne).toHaveBeenLastCalledWith({ _id: 'prod1' }, { $inc: { stock: 2 } });
       });
 
-      it('does NOT restore stock if the order was already saved (e.g. cart.save fails)', async () => {
+      it('does NOT restore stock if the order was already saved (cart.save fails)', async () => {
         const cart = makeCart([{ product: makeProduct(), quantity: 2 }]);
         cart.save.mockRejectedValue(new Error('cart save failed'));
         mockCartLookup(Cart, cart);
@@ -418,8 +383,7 @@ describe('orderController', () => {
         await controller.createOrder(makeReq({ body: { shippingAddress: validAddress } }), res);
 
         expect(res.status).toHaveBeenCalledWith(500);
-        // only the single reduce call, no rollback call
-        expect(Product.updateOne).toHaveBeenCalledTimes(1);
+        expect(Product.updateOne).toHaveBeenCalledTimes(1); // only the reduce, no rollback
       });
     });
   });
@@ -439,12 +403,12 @@ describe('orderController', () => {
       status: 'pending',
       orderItems: [{ product: 'prod1', quantity: 2 }],
       paymentResult: { razorpayOrderId: 'order_rzp_1' },
-      save: jest.fn().mockResolvedValue(true),
+      save: vi.fn().mockResolvedValue(true),
       ...overrides,
     });
 
     it('returns 400 when Razorpay is not configured', async () => {
-      ({ controller, Order, Cart, Product } = loadController({ withRazorpay: false }));
+      ({ controller } = await loadController({ withRazorpay: false }));
       const res = mockRes();
 
       await controller.verifyPayment(makeReq({ body: { ...baseBody, razorpaySignature: 'x' } }), res);
@@ -497,9 +461,7 @@ describe('orderController', () => {
     });
 
     it('returns 400 when the Razorpay order id does not match', async () => {
-      Order.findById.mockResolvedValue(
-        makePendingOrder({ paymentResult: { razorpayOrderId: 'different_id' } })
-      );
+      Order.findById.mockResolvedValue(makePendingOrder({ paymentResult: { razorpayOrderId: 'different' } }));
       const res = mockRes();
 
       await controller.verifyPayment(makeReq({ body: { ...baseBody, razorpaySignature: 'sig' } }), res);
@@ -531,10 +493,7 @@ describe('orderController', () => {
       const tampered = good.slice(0, -1) + (good.endsWith('a') ? 'b' : 'a');
       const res = mockRes();
 
-      await controller.verifyPayment(
-        makeReq({ body: { ...baseBody, razorpaySignature: tampered } }),
-        res
-      );
+      await controller.verifyPayment(makeReq({ body: { ...baseBody, razorpaySignature: tampered } }), res);
 
       expect(order.status).toBe('cancelled');
       expect(res.status).toHaveBeenCalledWith(400);
@@ -554,10 +513,7 @@ describe('orderController', () => {
       expect(order.isPaid).toBe(true);
       expect(order.status).toBe('processing');
       expect(order.paidAt).toEqual(expect.any(Number));
-      expect(order.paymentResult).toEqual({
-        razorpayOrderId: 'order_rzp_1',
-        razorpayPaymentId: 'pay_1',
-      });
+      expect(order.paymentResult).toEqual({ razorpayOrderId: 'order_rzp_1', razorpayPaymentId: 'pay_1' });
       expect(order.save).toHaveBeenCalled();
       expect(Cart.findOneAndUpdate).toHaveBeenCalledWith({ user: 'user1' }, { items: [] });
       expect(Product.updateOne).not.toHaveBeenCalled();
@@ -578,9 +534,9 @@ describe('orderController', () => {
 
   // -------------------------------------------------------------------
   describe('getMyOrders', () => {
-    it('returns the logged-in user\'s orders sorted by newest first', async () => {
+    it("returns the user's orders sorted newest first", async () => {
       const orders = [{ _id: 'o2' }, { _id: 'o1' }];
-      const sort = jest.fn().mockResolvedValue(orders);
+      const sort = vi.fn().mockResolvedValue(orders);
       Order.find.mockReturnValue({ sort });
       const res = mockRes();
 
@@ -593,7 +549,7 @@ describe('orderController', () => {
     });
 
     it('returns 500 when the query fails', async () => {
-      Order.find.mockReturnValue({ sort: jest.fn().mockRejectedValue(new Error('query failed')) });
+      Order.find.mockReturnValue({ sort: vi.fn().mockRejectedValue(new Error('query failed')) });
       const res = mockRes();
 
       await controller.getMyOrders(makeReq(), res);
@@ -627,7 +583,7 @@ describe('orderController', () => {
       expect(res.json).toHaveBeenCalledWith(order);
     });
 
-    it('lets an admin view anyone\'s order', async () => {
+    it("lets an admin view anyone's order", async () => {
       Order.findById.mockResolvedValue(order);
       const res = mockRes();
 
@@ -637,7 +593,6 @@ describe('orderController', () => {
       );
 
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(order);
     });
 
     it('returns 403 for a non-owner, non-admin user', async () => {

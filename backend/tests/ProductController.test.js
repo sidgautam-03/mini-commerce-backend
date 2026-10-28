@@ -1,33 +1,26 @@
-/**
- * Unit tests for controllers/productController.js
- *
- * Place at <server-root>/tests/productController.test.js
- * (adjust the relative paths if your folder layout is different).
- *
- * Run:  npx jest productController
- */
-const {
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import {
   getProducts,
   getProductById,
   createProduct,
   updateProduct,
   deleteProduct,
-} = require('../controllers/productController');
-const Product = require('../models/Product');
+} from '../controllers/productController.js';
+import Product from '../models/Product.js';
 
 // Product is used as a constructor (new Product) and for statics (find, findById)
-jest.mock('../models/Product', () => {
-  const ProductMock = jest.fn();
-  ProductMock.find = jest.fn();
-  ProductMock.findById = jest.fn();
-  return ProductMock;
+vi.mock('../models/Product.js', () => {
+  const ProductMock = vi.fn();
+  ProductMock.find = vi.fn();
+  ProductMock.findById = vi.fn();
+  return { default: ProductMock };
 });
 
 // ---------- helpers ----------
 const makeRes = () => {
   const res = {};
-  res.status = jest.fn().mockReturnValue(res);
-  res.json = jest.fn().mockReturnValue(res);
+  res.status = vi.fn().mockReturnValue(res);
+  res.json = vi.fn().mockReturnValue(res);
   return res;
 };
 
@@ -42,12 +35,11 @@ const validBody = {
 
 // Product.find(query).sort(sortOptions) chain
 const mockFindChain = (result = []) => {
-  const sort = jest.fn().mockResolvedValue(result);
+  const sort = vi.fn().mockResolvedValue(result);
   Product.find.mockReturnValue({ sort });
   return sort;
 };
 
-// an existing product document with mutable fields and save/deleteOne
 const makeDoc = (overrides = {}) => {
   const doc = {
     _id: 'p1',
@@ -57,17 +49,17 @@ const makeDoc = (overrides = {}) => {
     image: 'old.png',
     category: 'books',
     stock: 5,
-    deleteOne: jest.fn().mockResolvedValue(true),
+    deleteOne: vi.fn().mockResolvedValue(true),
     ...overrides,
   };
-  doc.save = jest.fn().mockImplementation(async () => doc);
+  doc.save = vi.fn().mockImplementation(async () => doc);
   return doc;
 };
 
 // =====================================================================
 describe('productController', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   // -------------------------------------------------------------------
@@ -152,7 +144,7 @@ describe('productController', () => {
     });
 
     it('returns 500 when the database query fails', async () => {
-      Product.find.mockReturnValue({ sort: jest.fn().mockRejectedValue(new Error('DB down')) });
+      Product.find.mockReturnValue({ sort: vi.fn().mockRejectedValue(new Error('DB down')) });
       const res = makeRes();
 
       await getProducts({ query: {} }, res);
@@ -162,8 +154,8 @@ describe('productController', () => {
     });
 
     it('returns 500 when category is repeated in the URL (array has no toLowerCase)', async () => {
-      // GET /api/products?category=a&category=b  ->  req.query.category is an array.
-      // Documents current behavior; validate/coerce category in the controller to make this a 400.
+      // GET /api/products?category=a&category=b -> req.query.category is an array.
+      // Documents current behavior; coerce/validate category in the controller to make this a 400.
       const res = makeRes();
 
       await getProducts({ query: { category: ['a', 'b'] } }, res);
@@ -213,8 +205,10 @@ describe('productController', () => {
     let mockSave;
 
     beforeEach(() => {
-      mockSave = jest.fn();
-      Product.mockImplementation((data) => ({ ...data, save: mockSave }));
+      mockSave = vi.fn();
+      Product.mockImplementation(function (data) {
+        return { ...data, save: mockSave };
+      });
     });
 
     it.each(['name', 'price', 'description', 'image', 'category', 'stock'])(
@@ -240,7 +234,7 @@ describe('productController', () => {
       expect(res.status).toHaveBeenCalledWith(400);
     });
 
-    it('accepts price 0 and stock 0 (they are valid values, not "missing")', async () => {
+    it('accepts price 0 and stock 0 (valid values, not "missing")', async () => {
       mockSave.mockResolvedValue({ _id: 'p1', ...validBody, price: 0, stock: 0 });
       const res = makeRes();
 
@@ -334,10 +328,7 @@ describe('productController', () => {
       const doc = makeDoc();
       Product.findById.mockResolvedValue(doc);
 
-      await updateProduct(
-        { params: { id: 'p1' }, body: { _id: 'hacked', isFeatured: true } },
-        makeRes()
-      );
+      await updateProduct({ params: { id: 'p1' }, body: { _id: 'hacked', isFeatured: true } }, makeRes());
 
       expect(doc._id).toBe('p1');
       expect(doc.isFeatured).toBeUndefined();
