@@ -1,6 +1,6 @@
-const asyncHandler = require('express-async-handler');
-const Cart = require('../models/Cart');
-const Product = require('../models/Product');
+import asyncHandler from 'express-async-handler';
+import Cart from '../models/Cart.js';
+import Product from '../models/Product.js';
 
 const productFields = 'name price image stock description category';
 
@@ -163,7 +163,7 @@ const clearCart = asyncHandler(async (req, res) => {
   await sendCart(res, cart);
 });
 
-module.exports = {
+export {
   getCart,
   addToCart,
   updateCartItemQuantity,

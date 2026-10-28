@@ -1,6 +1,6 @@
-require('dotenv').config();
 
 // ---------- imports ----------
+const dotenv = require('dotenv');
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -8,6 +8,8 @@ const cors = require('cors');
 const helmet = require('helmet');
 const { apiLimiter, authLimiter } = require('./middleware/rateLimiter');
 const jwt = require('jsonwebtoken');
+
+
 // config
 const connectDB = require('./config/db');
 
@@ -17,7 +19,7 @@ const { notFound, errorHandler } = require('./middleware/errorMiddleware');
 // routes
 const authRoutes = require('./routes/authRoutes');
 const productRoutes = require('./routes/productRoutes');
-const cartRoutes = require('./routes/cartRoutes');
+const cartRoutes = require('./routes/CartRoutes');
 const orderRoutes = require('./routes/orderRoutes');
 
 // ---------- setup ----------

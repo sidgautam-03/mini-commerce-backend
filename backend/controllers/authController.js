@@ -1,93 +1,131 @@
-const asyncHandler = require('express-async-handler');
-const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+import Product from '../models/Product.js';
 
-const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+// GET /api/products?keyword=&category=&sortBy=&order=
+const getProducts = async (req, res) => {
+  try {
+    const { keyword, category, sortBy, order } = req.query;
+
+    const query = {};
+
+    // search by name (case-insensitive)
+    if (keyword) {
+      query.name = { $regex: keyword, $options: 'i' };
+    }
+
+    // filter by category
+    if (category) {
+      query.category = category.toLowerCase();
+    }
+
+    // sorting: newest first by default
+    let sortOptions = { createdAt: -1 };
+
+    const allowedSortFields = ['price', 'name', 'createdAt'];
+    if (sortBy && allowedSortFields.includes(sortBy)) {
+      const sortOrder = order === 'asc' ? 1 : -1;
+      sortOptions = { [sortBy]: sortOrder };
+    }
+
+    const products = await Product.find(query).sort(sortOptions);
+    res.status(200).json(products);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
 };
 
-// POST /api/auth/register
-const registerUser = asyncHandler(async (req, res) => {
-  const { name, email, password } = req.body;
+// GET /api/products/:id
+const getProductById = async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id);
 
-  if (!name || !email || !password) {
-    res.status(400);
-    throw new Error('Please provide all required fields');
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+
+    res.status(200).json(product);
+  } catch (error) {
+    res.status(400).json({ message: 'Invalid product ID format' });
   }
+};
 
-  if (password.length < 6) {
-    res.status(400);
-    throw new Error('Password must be at least 6 characters');
-  }
+// POST /api/products (admin only)
+const createProduct = async (req, res) => {
+  try {
+    const { name, price, description, image, category, stock } = req.body;
 
-  const userExists = await User.findOne({ email });
+    if (
+      !name ||
+      price === undefined ||
+      !description ||
+      !image ||
+      !category ||
+      stock === undefined
+    ) {
+      return res.status(400).json({ message: 'Please provide all required fields' });
+    }
 
-  if (userExists) {
-    res.status(400);
-    throw new Error('User already exists');
-  }
-
-  // password hash karo, DB mein plain text nahi jaana chahiye
-  const hashedPassword = await bcrypt.hash(password, 10);
-
-  const user = await User.create({
-    name,
-    email,
-    password: hashedPassword,
-    role: 'customer',
-  });
-
-  res.status(201).json({
-    _id: user._id,
-    name: user.name,
-    email: user.email,
-    role: user.role,
-    token: generateToken(user._id),
-  });
-});
-
-// POST /api/auth/login
-const loginUser = asyncHandler(async (req, res) => {
-  const { email, password } = req.body;
-
-  if (!email || !password) {
-    res.status(400);
-    throw new Error('Please provide email and password');
-  }
-
-  // select: false hai, isliye password explicitly mangna padta hai
-  const user = await User.findOne({ email }).select('+password');
-
-  if (user && (await bcrypt.compare(password, user.password))) {
-    return res.status(200).json({
-      _id: user._id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      token: generateToken(user._id),
+    const product = new Product({
+      name,
+      price,
+      description,
+      image,
+      category,
+      stock,
     });
+
+    const createdProduct = await product.save();
+    res.status(201).json(createdProduct);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
+};
 
-  res.status(401);
-  throw new Error('Invalid email or password');
-});
+// PUT /api/products/:id (admin only)
+const updateProduct = async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id);
 
-// GET /api/auth/profile (protected)
-const getUserProfile = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.user._id);
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
 
-  if (!user) {
-    res.status(404);
-    throw new Error('User not found');
+    const { name, price, description, image, category, stock } = req.body;
+
+    // sirf wahi fields update hongi jo request mein aayi hain
+    if (name !== undefined) product.name = name;
+    if (price !== undefined) product.price = price;
+    if (description !== undefined) product.description = description;
+    if (image !== undefined) product.image = image;
+    if (category !== undefined) product.category = category;
+    if (stock !== undefined) product.stock = stock;
+
+    const updatedProduct = await product.save();
+    res.status(200).json(updatedProduct);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
   }
+};
 
-  res.status(200).json({
-    _id: user._id,
-    name: user.name,
-    email: user.email,
-    role: user.role,
-  });
-});
+// DELETE /api/products/:id (admin only)
+const deleteProduct = async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id);
 
-module.exports = { registerUser, loginUser, getUserProfile };
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+
+    await product.deleteOne();
+    res.status(200).json({ message: 'Product removed' });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
+export {
+  getProducts,
+  getProductById,
+  createProduct,
+  updateProduct,
+  deleteProduct,
+};

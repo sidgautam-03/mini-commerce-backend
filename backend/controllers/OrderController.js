@@ -1,8 +1,8 @@
-const Order = require('../models/Order');
-const Cart = require('../models/Cart');
-const Product = require('../models/Product');
-const Razorpay = require('razorpay');
-const crypto = require('crypto');
+import Order from '../models/Order.js';
+import Cart from '../models/Cart.js';
+import Product from '../models/Product.js';
+import Razorpay from 'razorpay';
+import crypto from 'crypto';
 
 // Razorpay tabhi chalu hoga jab dono keys .env mein hon
 let razorpayInstance = null;
@@ -285,4 +285,4 @@ const getOrderById = async (req, res) => {
   }
 };
 
-module.exports = { createOrder, verifyPayment, getMyOrders, getOrderById };
+export { createOrder, verifyPayment, getMyOrders, getOrderById };
