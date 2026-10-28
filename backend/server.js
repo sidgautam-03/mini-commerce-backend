@@ -1,26 +1,24 @@
-
 // ---------- imports ----------
-const dotenv = require('dotenv');
-const express = require('express');
-const http = require('http');
-const { Server } = require('socket.io');
-const cors = require('cors');
-const helmet = require('helmet');
-const { apiLimiter, authLimiter } = require('./middleware/rateLimiter');
-const jwt = require('jsonwebtoken');
-
+// dotenv sabse pehle load hona chahiye, warna controllers ke import-time env reads (Razorpay keys) undefined rahenge
+import 'dotenv/config';
+import express from 'express';
+import http from 'http';
+import { Server } from 'socket.io';
+import cors from 'cors';
+import helmet from 'helmet';
+import { apiLimiter, authLimiter } from './middleware/rateLimiter.js';
 
 // config
-const connectDB = require('./config/db');
+import connectDB from './config/db.js';
 
 // middleware
-const { notFound, errorHandler } = require('./middleware/errorMiddleware');
+import { notFound, errorHandler } from './middleware/errorMiddleware.js';
 
 // routes
-const authRoutes = require('./routes/authRoutes');
-const productRoutes = require('./routes/productRoutes');
-const cartRoutes = require('./routes/CartRoutes');
-const orderRoutes = require('./routes/orderRoutes');
+import authRoutes from './routes/authRoutes.js';
+import productRoutes from './routes/productRoutes.js';
+import cartRoutes from './routes/CartRoutes.js';
+import orderRoutes from './routes/orderRoutes.js';
 
 // ---------- setup ----------
 connectDB();
