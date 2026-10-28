@@ -8,6 +8,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import { apiLimiter, authLimiter } from './middleware/rateLimiter.js';
 
+
 // config
 import connectDB from './config/db.js';
 
@@ -25,6 +26,11 @@ connectDB();
 
 const app = express();
 const server = http.createServer(app);
+
+
+// Socket.io
+
+is.on("connection", (client) => {})
 
 // ---------- CORS options (Express aur Socket.IO dono ke liye ek hi) ----------
 // .env mein CLIENT_URL=http://localhost:3000 (React ka address)
